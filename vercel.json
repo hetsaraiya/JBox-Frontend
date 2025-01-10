@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/folder", "destination": "/index.html" },
+    { "source": "/file", "destination": "/index.html" },
+    { "source": "/:path*", "destination": "/index.html" }
+  ]
+}

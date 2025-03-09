@@ -4,8 +4,9 @@ import { Button } from '../components/Button';
 import { FolderList } from '../components/FolderList';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { UserProfile } from '../components/UserProfile';
 import { useStore } from '../store/useStore';
-import { API_ENDPOINTS } from '../config/api';
+import { apiGet, apiPost, apiDelete } from '../utils/apiService';
 
 export const Home = () => {
   const navigate = useNavigate();
@@ -16,12 +17,10 @@ export const Home = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(API_ENDPOINTS.folders);
-      if (!response.ok) throw new Error('Failed to fetch folders');
-      const data = await response.json();
+      const data = await apiGet('/folders/');
       setFolders(data);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to fetch folders');
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to fetch folders');
     } finally {
       setLoading(false);
     }
@@ -29,6 +28,7 @@ export const Home = () => {
 
   useEffect(() => {
     fetchFolders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateFolder = async () => {
@@ -38,17 +38,10 @@ export const Home = () => {
     try {
       setIsCreating(true);
       setError(null);
-      const response = await fetch(API_ENDPOINTS.createFolder(folderName), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) throw new Error('Failed to create folder');
-      await response.json();
+      await apiPost(`/create_folder/?name=${folderName}`);
       fetchFolders();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to create folder');
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to create folder');
     } finally {
       setIsCreating(false);
     }
@@ -57,14 +50,10 @@ export const Home = () => {
   const handleDeleteFolder = async (folderName: string) => {
     try {
       setError(null);
-      const response = await fetch(API_ENDPOINTS.deleteFolder(folderName), {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete folder');
-      await response.json();
+      await apiDelete(`/folders/${folderName}`);
       fetchFolders();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to delete folder');
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to delete folder');
     }
   };
 
@@ -72,12 +61,15 @@ export const Home = () => {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Folders</h1>
-        <Button
-          onClick={handleCreateFolder}
-          disabled={isCreating || isLoading}
-        >
-          Create Folder
-        </Button>
+        <div className="flex items-center space-x-4">
+          <UserProfile />
+          <Button
+            onClick={handleCreateFolder}
+            disabled={isCreating || isLoading}
+          >
+            Create Folder
+          </Button>
+        </div>
       </div>
 
       {error && <ErrorMessage message={error} />}

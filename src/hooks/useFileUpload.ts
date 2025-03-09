@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface UploadingFile {
   name: string;
@@ -14,8 +15,13 @@ interface UseFileUploadReturn {
 
 export const useFileUpload = (onUploadComplete?: () => void): UseFileUploadReturn => {
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const { token } = useAuthStore();
 
   const uploadFiles = useCallback(async (files: FileList, folderId: string) => {
+    if (!token) {
+      throw new Error("Authentication token is missing");
+    }
+
     // Initialize upload progress for all files
     setUploadingFiles(
       Array.from(files).map(file => ({
@@ -31,6 +37,9 @@ export const useFileUpload = (onUploadComplete?: () => void): UseFileUploadRetur
 
       try {
         await axios.post(API_ENDPOINTS.upload(folderId), formData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -62,7 +71,7 @@ export const useFileUpload = (onUploadComplete?: () => void): UseFileUploadRetur
     if (onUploadComplete) {
       onUploadComplete();
     }
-  }, [onUploadComplete]);
+  }, [onUploadComplete, token]);
 
   return {
     uploadingFiles,

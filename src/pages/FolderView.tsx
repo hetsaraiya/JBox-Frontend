@@ -1,69 +1,98 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
-import { DropZone } from '../components/DropZone';
 import { FileList } from '../components/FileList';
+import { DropZone } from '../components/DropZone';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { UploadProgress } from '../components/UploadProgress';
-import { useFileUpload } from '../hooks/useFileUpload';
 import { useFiles } from '../hooks/useFiles';
+import { useFileUpload } from '../hooks/useFileUpload';
+import { UserProfile } from '../components/UserProfile';
+import { apiGet } from '../utils/apiService';
 
 export const FolderView = () => {
+  const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const searchParams = new URLSearchParams(location.search);
   const folderId = searchParams.get('id');
-  
-  const { 
-    files, 
-    isLoading, 
-    error, 
-    fetchFiles,
-    deleteFile,
-    downloadFile 
-  } = useFiles(folderId);
-
+  const [folderName, setFolderName] = useState<string>('');
+  const { files, isLoading, error, deleteFile, downloadFile, fetchFiles } = useFiles(folderId);
   const { uploadingFiles, uploadFiles } = useFileUpload(fetchFiles);
 
-  const handleFilesDrop = async (files: FileList) => {
+  // Fetch folder name
+  useEffect(() => {
+    const fetchFolderName = async () => {
+      if (!folderId) return;
+      
+      try {
+        const folders = await apiGet('/folders/');
+        const folder = folders.find((f: any) => f.id === parseInt(folderId));
+        if (folder) {
+          setFolderName(folder.name);
+        }
+      } catch (error) {
+        console.error('Error fetching folder name:', error);
+      }
+    };
+    
+    fetchFolderName();
+  }, [folderId]);
+
+  const handleFileUpload = async (files: File[]) => {
     if (!folderId) return;
-    await uploadFiles(files, folderId);
+    
+    // Convert File[] to FileList for the useFileUpload hook
+    const dataTransfer = new DataTransfer();
+    files.forEach(file => dataTransfer.items.add(file));
+    await uploadFiles(dataTransfer.files, folderId);
   };
 
-  if (!folderId) {
-    return <ErrorMessage message="No folder ID provided" />;
-  }
+  const handleFileClick = (fileName: string) => {
+    if (!folderId) return;
+    navigate(`/file?name=${encodeURIComponent(fileName)}&folder=${folderId}`);
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <Button
-        variant="secondary"
-        className="mb-6 flex items-center space-x-2"
-        onClick={() => navigate('/')}
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Folders</span>
-      </Button>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/')}
+            className="mb-4"
+          >
+            ← Back to Folders
+          </Button>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            {folderName || 'Folder'}
+          </h1>
+        </div>
+        <UserProfile />
+      </div>
 
-      <h1 className="text-3xl font-bold mb-8 dark:text-white">Files</h1>
-      
       {error && <ErrorMessage message={error} />}
 
-      <DropZone onFilesDrop={handleFilesDrop} />
-      
-      <UploadProgress files={uploadingFiles} />
-      
-      <div className="mt-8">
-        {isLoading ? (
-          <LoadingSpinner />
-        ) : (
-          <FileList
-            files={files}
-            onDownload={downloadFile}
-            onDelete={deleteFile}
-          />
-        )}
+      <div className="mb-8">
+        <DropZone onFilesDrop={handleFileUpload} disabled={uploadingFiles.length > 0} />
       </div>
+
+      {uploadingFiles.length > 0 && (
+        <div className="mb-8">
+          <UploadProgress files={uploadingFiles} />
+        </div>
+      )}
+
+      {isLoading ? (
+        <LoadingSpinner />
+      ) : (
+        <FileList
+          files={files}
+          onFileClick={handleFileClick}
+          onDownload={downloadFile}
+          onDelete={deleteFile}
+        />
+      )}
     </div>
   );
 };

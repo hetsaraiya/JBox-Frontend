@@ -1,5 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useStore } from '../store/useStore';
+import { apiGet, apiDelete } from '../utils/apiService';
+import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
 
 export const useFiles = (folderId: string | null) => {
@@ -12,13 +14,10 @@ export const useFiles = (folderId: string | null) => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(API_ENDPOINTS.files(folderId));
-      if (!response.ok) throw new Error('Failed to fetch files');
-      
-      const data = await response.json();
+      const data = await apiGet(`/files/${folderId}`);
       setFiles(data);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to fetch files');
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to fetch files');
     } finally {
       setLoading(false);
     }
@@ -33,26 +32,35 @@ export const useFiles = (folderId: string | null) => {
     
     try {
       setError(null);
-      const response = await fetch(
-        API_ENDPOINTS.deleteFile(fileName, folderId),
-        {
-          method: 'DELETE',
-          headers: {
-            Accept: 'application/json',
-          },
-        }
-      );
-      
-      if (!response.ok) throw new Error('Failed to delete file');
-      await response.json();
+      await apiDelete(`/files/${encodeURIComponent(fileName)}?folder_id=${folderId}`);
       fetchFiles();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to delete file');
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to delete file');
     }
   };
 
-  const downloadFile = (fileName: string) => {
-    window.location.href = API_ENDPOINTS.download(fileName);
+  const downloadFile = async (fileName: string) => {
+    if (!folderId) return;
+    
+    try {
+      const response = await axios.get(API_ENDPOINTS.download(fileName, folderId), {
+        responseType: 'blob',
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to download file');
+    }
   };
 
   return {

@@ -4,8 +4,12 @@ export interface Folder {
 }
 
 export interface File {
-  id: string;
+  id?: string;
   name: string;
   size?: number;
-  type?: string;
+  mime_type?: string;
+  viewable?: boolean;
+  type?: string;  // file type category: image, video, audio, pdf, text, code, other
 }
+
+export type FileTypeCategory = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'code' | 'other';

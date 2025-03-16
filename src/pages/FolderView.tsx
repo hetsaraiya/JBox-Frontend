@@ -26,8 +26,9 @@ export const FolderView = () => {
       if (!folderId) return;
       
       try {
-        const folders = await apiGet('/folders/');
-        const folder = folders.find((f: any) => f.id === parseInt(folderId));
+        const response = await apiGet('/folders/');
+        const folders = response as Array<{ id: number; name: string }>;
+        const folder = folders.find((f) => f.id === parseInt(folderId));
         if (folder) {
           setFolderName(folder.name);
         }
@@ -46,11 +47,6 @@ export const FolderView = () => {
     const dataTransfer = new DataTransfer();
     files.forEach(file => dataTransfer.items.add(file));
     await uploadFiles(dataTransfer.files, folderId);
-  };
-
-  const handleFileClick = (fileName: string) => {
-    if (!folderId) return;
-    navigate(`/file?name=${encodeURIComponent(fileName)}&folder=${folderId}`);
   };
 
   return (
@@ -88,7 +84,7 @@ export const FolderView = () => {
       ) : (
         <FileList
           files={files}
-          onFileClick={handleFileClick}
+          onFileClick={(fileName) => navigate(`/file?name=${encodeURIComponent(fileName)}&folder=${folderId}`)}
           onDownload={downloadFile}
           onDelete={deleteFile}
         />

@@ -20,6 +20,10 @@ export const API_ENDPOINTS = {
     `${API_BASE_URL}/files/${encodeURIComponent(fileName)}?folder_id=${folderId}`,
   openFile: (fileName: string, folderId: string) => 
     `${API_BASE_URL}/open/${encodeURIComponent(fileName)}?folder_id=${folderId}`,
+  fileMetadata: (fileName: string, folderId: string) =>
+    `${API_BASE_URL}/metadata/${encodeURIComponent(fileName)}?folder_id=${folderId}`,
+  checkFileSupport: (fileName: string, folderId: string) =>
+    `${API_BASE_URL}/check/${encodeURIComponent(fileName)}?folder_id=${folderId}`,
 
   // WebSocket
   wsProgress: `ws://127.0.0.1:8000/ws/progress`

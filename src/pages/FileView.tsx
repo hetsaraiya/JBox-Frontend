@@ -3,9 +3,20 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
-import api from '../utils/apiService';
+import { FilePreview } from '../components/FilePreview';
+import api, { apiGet } from '../utils/apiService';
 import { API_ENDPOINTS } from '../config/api';
 import { UserProfile } from '../components/UserProfile';
+import { Download } from 'lucide-react';
+import type { FileTypeCategory } from '../types';
+
+interface FileMetadata {
+  name: string;
+  mime_type: string;
+  viewable: boolean;
+  type: FileTypeCategory;
+  chunk_count: number;
+}
 
 export const FileView = () => {
   const location = useLocation();
@@ -16,16 +27,45 @@ export const FileView = () => {
   const [loading, setLoading] = useState(true);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<FileMetadata | null>(null);
+  const [unsupportedFormat, setUnsupportedFormat] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!fileName || !folderId) return;
 
-    const loadFile = async () => {
+    const checkFileSupport = async () => {
       try {
         setLoading(true);
         setError(null);
+
+        // First check if the file is supported via the HEAD request
+        const checkResponse = await fetch(API_ENDPOINTS.checkFileSupport(fileName, folderId), {
+          method: 'HEAD',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? 
+              JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token : ''}`
+          }
+        });
+
+        // Get metadata to know more about the file
+        const metadataResponse = await apiGet<{ file: FileMetadata, status: boolean }>(
+          API_ENDPOINTS.fileMetadata(fileName, folderId)
+        );
         
-        // Request the file with authentication headers via our API service
+        setMetadata(metadataResponse.file);
+        
+        if (checkResponse.status === 415 || !metadataResponse.file.viewable) {
+          setUnsupportedFormat(true);
+          setErrorMessage("This file type is not supported for viewing in browser");
+          
+          // Create a download URL for the user to download instead
+          // No need to set fileUrl since we'll show an error state
+          setLoading(false);
+          return;
+        }
+
+        // File is supported, proceed with loading content
         const response = await api.get(API_ENDPOINTS.openFile(fileName, folderId), {
           responseType: 'blob'
         });
@@ -35,13 +75,18 @@ export const FileView = () => {
         setFileUrl(url);
       } catch (error: any) {
         console.error('Error loading file:', error);
-        setError(error.response?.data?.detail || 'Failed to load file');
+        if (error.response?.status === 415) {
+          setUnsupportedFormat(true);
+          setErrorMessage("This file type is not supported for viewing in browser");
+        } else {
+          setError(error.response?.data?.detail || error.response?.data?.message || 'Failed to load file');
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    loadFile();
+    checkFileSupport();
     
     // Cleanup URL object when component unmounts
     return () => {
@@ -51,64 +96,27 @@ export const FileView = () => {
     };
   }, [fileName, folderId]);
 
-  const getFileType = () => {
-    if (!fileName) return '';
-    
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
-      return 'image';
-    } else if (['mp4', 'webm', 'ogg'].includes(extension || '')) {
-      return 'video';
-    } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      return 'audio';
-    } else if (['pdf'].includes(extension || '')) {
-      return 'pdf';
-    } else if (['txt', 'md', 'js', 'ts', 'html', 'css', 'json'].includes(extension || '')) {
-      return 'text';
-    }
-    
-    return 'other';
-  };
+  const handleDownload = async () => {
+    if (!fileName || !folderId) return;
 
-  const renderFileContent = () => {
-    if (!fileUrl) return null;
-
-    const fileType = getFileType();
-
-    switch (fileType) {
-      case 'image':
-        return <img src={fileUrl} alt={fileName || 'File'} className="max-w-full h-auto" />;
-      case 'video':
-        return (
-          <video controls className="max-w-full">
-            <source src={fileUrl} type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
-        );
-      case 'audio':
-        return (
-          <audio controls className="w-full mt-4">
-            <source src={fileUrl} />
-            Your browser does not support the audio tag.
-          </audio>
-        );
-      case 'pdf':
-        return (
-          <iframe
-            title={fileName || 'PDF Viewer'}
-            src={fileUrl}
-            className="w-full h-[80vh]"
-          />
-        );
-      default:
-        return (
-          <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mt-4">
-            <p className="text-center text-gray-500 dark:text-gray-400">
-              Preview not available. <a href={fileUrl} download={fileName || 'file'} className="text-blue-500 hover:underline">Download file</a>
-            </p>
-          </div>
-        );
+    try {
+      const response = await api.get(API_ENDPOINTS.download(fileName, folderId), {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to download file');
     }
   };
 
@@ -123,11 +131,33 @@ export const FileView = () => {
           >
             ← Back to Files
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate flex items-center">
             {fileName || 'File Viewer'}
+            {metadata?.viewable === false && (
+              <span className="ml-3 text-sm bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                Download only
+              </span>
+            )}
           </h1>
+          {metadata && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              {metadata.mime_type || "Unknown type"}
+            </p>
+          )}
         </div>
-        <UserProfile />
+        <div className="flex items-center space-x-2">
+          {!loading && (
+            <Button
+              onClick={handleDownload}
+              variant="secondary"
+              className="flex items-center space-x-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download</span>
+            </Button>
+          )}
+          <UserProfile />
+        </div>
       </div>
 
       {error && <ErrorMessage message={error} />}
@@ -138,9 +168,15 @@ export const FileView = () => {
             <LoadingSpinner />
           </div>
         ) : (
-          <div className="flex flex-col items-center">
-            {renderFileContent()}
-          </div>
+          <FilePreview
+            fileUrl={fileUrl}
+            fileName={fileName}
+            fileType={metadata?.type as FileTypeCategory}
+            mimeType={metadata?.mime_type}
+            isError={unsupportedFormat}
+            errorMessage={errorMessage || undefined}
+            onDownload={handleDownload}
+          />
         )}
       </div>
     </div>

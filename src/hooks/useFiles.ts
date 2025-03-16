@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { apiGet, apiDelete } from '../utils/apiService';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
+import { File } from '../types';
 
 export const useFiles = (folderId: string | null) => {
   const { files, setFiles, isLoading, error, setLoading, setError } = useStore();
@@ -14,8 +15,12 @@ export const useFiles = (folderId: string | null) => {
       setLoading(true);
       setError(null);
       
-      const data = await apiGet(`/files/${folderId}`);
-      setFiles(data);
+      const response = await apiGet<{ files: File[], status: boolean, count: number }>(`/files/${folderId}`);
+      if (response.status && Array.isArray(response.files)) {
+        setFiles(response.files);
+      } else {
+        setFiles([]);
+      }
     } catch (error: any) {
       setError(error.response?.data?.detail || 'Failed to fetch files');
     } finally {
@@ -63,12 +68,25 @@ export const useFiles = (folderId: string | null) => {
     }
   };
 
+  const getFileMetadata = async (fileName: string) => {
+    if (!folderId) return null;
+    
+    try {
+      const response = await apiGet<{ file: File }>(API_ENDPOINTS.fileMetadata(fileName, folderId));
+      return response.file;
+    } catch (error: any) {
+      console.error('Failed to fetch file metadata:', error);
+      return null;
+    }
+  };
+
   return {
     files,
     isLoading,
     error,
     fetchFiles,
     deleteFile,
-    downloadFile
+    downloadFile,
+    getFileMetadata
   };
 };
